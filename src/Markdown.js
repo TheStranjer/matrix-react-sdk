@@ -165,6 +165,55 @@ export default class Markdown {
 */
         };
 
+        renderer.block_quote = function (node, entering) {
+
+            //looking at the buffer is so that nested <font>
+            //tags do not get made when you have layered greentext
+            //i.e., >>whatever ; it's a bit hacky, but
+            //I could not discern a better approach
+
+            var fontOpenTagOccurrences = (this.buffer.match(/<font color="#789922">/ig) || []).length;
+            var fontCloseTagOccurrences = (this.buffer.match(/<\/font>/ig) || []).length;
+            if (entering) {
+                if (fontOpenTagOccurrences <= fontCloseTagOccurrences) {
+                    var attrs = this.attrs(node);
+                    attrs.push(['color', '#789922']);
+                    this.tag('font', attrs);
+                }
+
+                if (!node.firstChild) {
+                    this.buffer='<font color="#789922">&gt;';
+                    return;
+                }
+                var curNode = node.firstChild.firstChild;
+                var greentextsymbol = true;
+                do {
+                    switch (curNode.type) {
+                        case 'softbreak':
+                            greentextsymbol = true;
+                            break;
+                        case 'text':
+                            if (greentextsymbol) {
+                                curNode.literal = '>' + curNode.literal;
+                                greentextsymbol = false;
+                            }
+                            break;
+
+                        default:
+                            if (greentextsymbol) {
+                                curNode.firstChild.literal = '>' + curNode.firstChild.literal;
+                                greentextsymbol = false;
+                            }
+                    }
+                } while (curNode = curNode.next);
+
+            } else {
+                if (fontOpenTagOccurrences > fontCloseTagOccurrences) {
+                    this.tag('/font');
+                }
+            }
+        };
+
         return renderer.render(this.parsed);
     }
 
